@@ -1,2 +1,2 @@
-flask
-duckduckgo-search
+flask>=3.0.0
+duckduckgo-search>=8.0.0

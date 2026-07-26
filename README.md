@@ -19,19 +19,23 @@ A Flask-based web application that fetches and analyses global investment news f
 
 ## Setup & Run
 
+### Clone & Start (for team members)
+
 ```bash
-# 1. Create and activate virtual environment
-python3 -m venv venv
-source venv/bin/activate
+# 1. Clone the repo
+git clone https://github.com/arushi153/investment_tracker.git
+cd investment_tracker
 
-# 2. Install dependencies
-pip install flask duckduckgo-search
+# 2. Run the one-click setup
+bash setup.sh
 
-# 3. Run the app
-python app.py
+# 3. Start the app (every time after)
+source venv/bin/activate && python app.py
 ```
 
 Then open **http://127.0.0.1:5000/** in your browser.
+
+> ⚠️ **macOS note:** If you see an SSL error, it is automatically handled by the app. No action needed.
 
 ---
 
