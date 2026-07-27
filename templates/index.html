@@ -61,6 +61,33 @@
         .tab-button { flex:1; background:none; border:none; padding:16px; font-size:14px; font-weight:700; color:#64748b; cursor:pointer; border-bottom:3px solid transparent; transition:0.2s; text-transform:uppercase; letter-spacing:0.5px; border-radius: 0; }
         .tab-button:hover { color:#1d4ed8; background: #f1f5f9; }
         .tab-button.active { color:#1d4ed8; border-bottom-color:#2563eb; background: #fff; }
+        .find-btn { margin-top:14px; display:inline-flex; align-items:center; gap:6px; padding:9px 16px; background:linear-gradient(135deg,#0077b5,#005fa3); color:#fff; border:none; border-radius:8px; font-size:13px; font-weight:700; cursor:pointer; transition:0.2s; }
+        .find-btn:hover { background:linear-gradient(135deg,#005fa3,#004080); transform:translateY(-1px); }
+        .find-btn svg { width:16px; height:16px; fill:#fff; }
+        .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:1000; align-items:center; justify-content:center; }
+        .modal-overlay.active { display:flex; }
+        .modal-box { background:#fff; border-radius:18px; width:min(680px,95vw); max-height:85vh; overflow-y:auto; box-shadow:0 24px 80px rgba(0,0,0,0.3); animation:modalIn 0.25s ease; }
+        @keyframes modalIn { from{transform:translateY(30px);opacity:0} to{transform:translateY(0);opacity:1} }
+        .modal-header { display:flex; align-items:center; justify-content:space-between; padding:22px 28px 16px; border-bottom:1px solid #e5e7eb; }
+        .modal-header h3 { margin:0; font-size:18px; color:#1e3a5f; }
+        .modal-close { background:none; border:none; font-size:22px; cursor:pointer; color:#64748b; line-height:1; padding:4px 8px; border-radius:6px; }
+        .modal-close:hover { background:#f1f5f9; color:#1e3a5f; }
+        .modal-body { padding:20px 28px 28px; }
+        .investor-company { font-size:13px; color:#64748b; margin:0 0 18px; }
+        .investor-company strong { color:#1e3a5f; font-size:15px; }
+        .result-card { display:flex; gap:14px; align-items:flex-start; padding:14px; border:1px solid #e5e7eb; border-radius:12px; margin-bottom:12px; text-decoration:none; color:inherit; transition:0.15s; }
+        .result-card:hover { border-color:#2563eb; background:#f0f7ff; transform:translateX(2px); }
+        .result-icon { width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:20px; }
+        .result-icon.linkedin { background:#e8f4fb; }
+        .result-icon.person { background:#fef3c7; }
+        .result-icon.website { background:#f0fdf4; }
+        .result-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#64748b; margin-bottom:3px; }
+        .result-title { font-size:14px; font-weight:700; color:#1e3a5f; margin-bottom:4px; }
+        .result-desc { font-size:12px; color:#64748b; line-height:1.5; }
+        .modal-loading { text-align:center; padding:40px 20px; color:#64748b; }
+        .modal-spinner { width:36px; height:36px; border:3px solid #e5e7eb; border-top-color:#2563eb; border-radius:50%; animation:spin 0.7s linear infinite; margin:0 auto 14px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .modal-empty { text-align:center; padding:32px; color:#94a3b8; }
         @media(max-width:900px){ .top-header{grid-template-columns:80px 1fr;padding:16px}.top-header>div:last-child{display:none}.header-title h1{font-size:24px}.primary-nav,.secondary-nav,.tertiary-nav,.main-content{padding-left:16px;padding-right:16px}.dashboard-grid{grid-template-columns:repeat(2,1fr)}.action-area{width:100%;margin-left:0} }
         @media(max-width:560px){ .dashboard-grid{grid-template-columns:1fr}.nav-item{width:100%}.country-panel{width:100%}.action-area{flex-direction:column}.action-area button{width:100%}.news-top{flex-direction:column} }
     </style>
@@ -110,6 +137,19 @@
             <div class="news-container" id="newsContainer"><div class="empty-state"><h3>No news loaded yet</h3><p>Select filters and click Find latest news.</p></div></div>
         </section>
     </main>
+</div>
+
+<!-- Investor Contact Modal -->
+<div class="modal-overlay" id="investorModal" onclick="closeModalOnOverlay(event)">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h3>🔍 Investor / Company Contact</h3>
+            <button class="modal-close" onclick="closeInvestorModal()">✕</button>
+        </div>
+        <div class="modal-body" id="modalBody">
+            <div class="modal-loading"><div class="modal-spinner"></div><p>Searching LinkedIn &amp; web...</p></div>
+        </div>
+    </div>
 </div>
  
 <script>
@@ -242,14 +282,73 @@ function renderNews(articles) {
         description.className = "news-description";
         description.textContent = article.description || "No description available.";
  
+        // Find Investor button
+        const findBtn = document.createElement("button");
+        findBtn.className = "find-btn";
+        findBtn.innerHTML = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg> Find Investor Contact';
+        findBtn.addEventListener("click", function(e) {
+            e.stopPropagation();
+            openInvestorModal(article.title, article.source);
+        });
+ 
         const keywordRow = document.createElement("div"); keywordRow.className = "keyword-row";
         (article.matched_keywords || []).forEach(function(keyword) {
             const chip = document.createElement("span"); chip.className = "keyword-chip"; chip.textContent = keyword; keywordRow.appendChild(chip);
         });
  
-        card.appendChild(top); card.appendChild(meta); card.appendChild(description); card.appendChild(keywordRow);
+        card.appendChild(top); card.appendChild(meta); card.appendChild(description); card.appendChild(findBtn); card.appendChild(keywordRow);
         newsContainer.appendChild(card);
     });
+}
+ 
+function openInvestorModal(title, source) {
+    document.getElementById("investorModal").classList.add("active");
+    document.getElementById("modalBody").innerHTML = '<div class="modal-loading"><div class="modal-spinner"></div><p>Searching LinkedIn &amp; web for investor contacts...</p></div>';
+    
+    fetch("/api/find-investor", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: title, source: source })
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+        const iconMap = { linkedin: "💼", person: "👤", website: "🌐" };
+        const colorMap = { linkedin: "linkedin", person: "person", website: "website" };
+        
+        let html = '<p class="investor-company">Showing contacts for: <strong>' + (data.company || title) + '</strong></p>';
+        
+        if (!data.results || data.results.length === 0) {
+            html += '<div class="modal-empty"><p>No contacts found. Try searching on <a href="https://www.linkedin.com/search/results/companies/?keywords=' + encodeURIComponent(data.company || title) + '" target="_blank" style="color:#0077b5;font-weight:700;">LinkedIn directly</a>.</p></div>';
+        } else {
+            data.results.forEach(function(r) {
+                html += '<a href="' + r.url + '" target="_blank" rel="noopener" class="result-card">' +
+                    '<div class="result-icon ' + (colorMap[r.type] || "website") + '">' + (iconMap[r.type] || "🌐") + '</div>' +
+                    '<div><div class="result-label">' + r.label + '</div>' +
+                    '<div class="result-title">' + r.title + '</div>' +
+                    '<div class="result-desc">' + r.description + '</div></div></a>';
+            });
+            // Always add a direct LinkedIn search fallback
+            html += '<a href="https://www.linkedin.com/search/results/companies/?keywords=' + encodeURIComponent(data.company || title) + '" target="_blank" rel="noopener" class="result-card" style="border-style:dashed;">' +
+                '<div class="result-icon linkedin">🔍</div>' +
+                '<div><div class="result-label">Search More</div>' +
+                '<div class="result-title">Search "' + (data.company || title) + '" on LinkedIn</div>' +
+                '<div class="result-desc">Open a full LinkedIn company &amp; people search in a new tab.</div></div></a>';
+        }
+        document.getElementById("modalBody").innerHTML = html;
+    })
+    .catch(function() {
+        document.getElementById("modalBody").innerHTML = '<div class="modal-empty"><p>Search failed. Please try again.</p></div>';
+    });
+}
+ 
+function closeInvestorModal() {
+    document.getElementById("investorModal").classList.remove("active");
+}
+ 
+function closeModalOnOverlay(event) {
+    if (event.target === document.getElementById("investorModal")) {
+        closeInvestorModal();
+    }
 }
  
 function resetDashboard() {

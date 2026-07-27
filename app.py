@@ -338,5 +338,92 @@ def api_news():
         "articles": articles
     })
  
+def extract_company_name(title):
+    """Extract the most likely company/investor name from a news headline."""
+    # Remove common noise words from the start
+    noise_starts = ["india ", "govt ", "government ", "centre ", "center ",
+                    "report:", "analysis:", "exclusive:"]
+    clean = title.strip()
+    for noise in noise_starts:
+        if clean.lower().startswith(noise):
+            clean = clean[len(noise):]
+    
+    # Try to get the subject before common verbs
+    split_patterns = [
+        r'\s+plans?\s+', r'\s+invests?\s+', r'\s+announces?\s+', r'\s+launches?\s+',
+        r'\s+signs?\s+', r'\s+partners?\s+', r'\s+acquires?\s+', r'\s+raises?\s+',
+        r'\s+to\s+invest\s+', r'\s+bags?\s+', r'\s+gets?\s+', r'\s+wins?\s+'
+    ]
+    for pattern in split_patterns:
+        parts = re.split(pattern, clean, maxsplit=1, flags=re.IGNORECASE)
+        if len(parts) > 1 and len(parts[0].strip()) > 3:
+            return parts[0].strip()
+    
+    # Fallback: first 4 words
+    words = clean.split()
+    return " ".join(words[:4])
+
+@app.post("/api/find-investor")
+def api_find_investor():
+    data = request.get_json(force=True)
+    title = data.get("title", "").strip()
+    source = data.get("source", "").strip()
+    
+    if not title:
+        return jsonify({"success": False, "results": []})
+    
+    company = extract_company_name(title)
+    results = []
+    
+    try:
+        with DDGS() as ddgs:
+            # Search 1: LinkedIn company page
+            linkedin_query = f'"{company}" site:linkedin.com/company'
+            linkedin_results = ddgs.text(linkedin_query, max_results=3) or []
+            for item in linkedin_results:
+                if "linkedin.com" in item.get("href", ""):
+                    results.append({
+                        "type": "linkedin",
+                        "label": "LinkedIn Profile",
+                        "title": item.get("title", company),
+                        "url": item.get("href", ""),
+                        "description": item.get("body", "")[:200]
+                    })
+            
+            # Search 2: LinkedIn people (decision makers)
+            people_query = f'"{company}" CEO OR "Managing Director" OR "Head of Investment" site:linkedin.com/in'
+            people_results = ddgs.text(people_query, max_results=3) or []
+            for item in people_results:
+                if "linkedin.com/in" in item.get("href", ""):
+                    results.append({
+                        "type": "person",
+                        "label": "Key Person",
+                        "title": item.get("title", ""),
+                        "url": item.get("href", ""),
+                        "description": item.get("body", "")[:200]
+                    })
+            
+            # Search 3: Official website / contact page
+            contact_query = f'"{company}" official website contact investor relations'
+            contact_results = ddgs.text(contact_query, max_results=2) or []
+            for item in contact_results:
+                href = item.get("href", "")
+                if "linkedin.com" not in href:
+                    results.append({
+                        "type": "website",
+                        "label": "Website / Contact",
+                        "title": item.get("title", ""),
+                        "url": href,
+                        "description": item.get("body", "")[:200]
+                    })
+    except Exception as e:
+        print("Investor search error:", repr(e))
+    
+    return jsonify({
+        "success": True,
+        "company": company,
+        "results": results[:7]  # limit to 7 results
+    })
+
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=5000, debug=True)
