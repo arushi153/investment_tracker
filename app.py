@@ -181,29 +181,44 @@ def calculate_score(text, keywords, sector, country, state):
  
     return score, list(dict.fromkeys(matched)), viability_msg, is_viable
  
-def build_queries(sector):
+def build_queries(sector, state=""):
+    state_part = f' "{state}"' if state else ""
     queries = [
+        # Global investment queries
         f'{sector} investment',
         f'{sector} (expansion OR plant OR facility)',
-        f'{sector} cap-ex' 
+        f'{sector} cap-ex',
+        # India-specific queries
+        f'India {sector} investment{state_part}',
+        f'{sector} crore investment India',
     ]
+    if state:
+        queries.append(f'{state} {sector} investment')
  
     clean_queries = []
     for query in queries:
         query = " ".join(query.split())
         if query and query not in clean_queries:
             clean_queries.append(query)
-    return clean_queries[:3]
+    return clean_queries[:6]
  
-def fetch_google_news(query, keywords, sector, country, state):
+def fetch_google_news(query, keywords, sector, country, state, locale="US"):
     articles = []
-    cutoff_date = datetime.now(timezone.utc) - timedelta(days=30) # Back to 1 month
+    cutoff_date = datetime.now(timezone.utc) - timedelta(days=30)
     encoded_query = quote_plus(query + " when:30d")
-    rss_url = (
-        "https://news.google.com/rss/search?"
-        + "q=" + encoded_query
-        + "&hl=en-US&gl=US&ceid=US:en"
-    )
+    
+    if locale == "IN":
+        rss_url = (
+            "https://news.google.com/rss/search?"
+            + "q=" + encoded_query
+            + "&hl=en-IN&gl=IN&ceid=IN:en"
+        )
+    else:
+        rss_url = (
+            "https://news.google.com/rss/search?"
+            + "q=" + encoded_query
+            + "&hl=en-US&gl=US&ceid=US:en"
+        )
  
     try:
         request_object = Request(rss_url, headers={"User-Agent": "Mozilla/5.0"})
@@ -311,12 +326,17 @@ def api_news():
         }), 400
  
     keywords = load_keywords()
-    queries = build_queries(sector)
+    queries = build_queries(sector, state)
     all_articles = []
  
     for query in queries:
+        # Fetch from US/Global edition
         all_articles.extend(fetch_google_news(
-            query, keywords, sector, country, state
+            query, keywords, sector, country, state, locale="US"
+        ))
+        # Fetch from India edition — gets ET, Mint, Business Standard, etc.
+        all_articles.extend(fetch_google_news(
+            query, keywords, sector, country, state, locale="IN"
         ))
  
     articles_by_title = {}
@@ -340,28 +360,40 @@ def api_news():
  
 def extract_company_name(title):
     """Extract the most likely company/investor name from a news headline."""
-    # Remove common noise words from the start
-    noise_starts = ["india ", "govt ", "government ", "centre ", "center ",
-                    "report:", "analysis:", "exclusive:"]
+    # Remove leading noise phrases
+    noise_starts = [
+        "india ", "govt ", "government ", "centre ", "center ",
+        "report:", "analysis:", "exclusive:", "breaking:"
+    ]
     clean = title.strip()
     for noise in noise_starts:
         if clean.lower().startswith(noise):
-            clean = clean[len(noise):]
-    
-    # Try to get the subject before common verbs
-    split_patterns = [
+            clean = clean[len(noise):].strip()
+
+    # Split on action verbs — everything before the verb is the company
+    verb_patterns = [
         r'\s+plans?\s+', r'\s+invests?\s+', r'\s+announces?\s+', r'\s+launches?\s+',
         r'\s+signs?\s+', r'\s+partners?\s+', r'\s+acquires?\s+', r'\s+raises?\s+',
-        r'\s+to\s+invest\s+', r'\s+bags?\s+', r'\s+gets?\s+', r'\s+wins?\s+'
+        r'\s+to\s+invest\s+', r'\s+bags?\s+', r'\s+gets?\s+', r'\s+wins?\s+',
+        r'\s+sets?\s+', r'\s+targets?\s+', r'\s+posts?\s+', r'\s+reports?\s+',
+        r'\s+eyes?\s+', r'\s+mulls?\s+', r'\s+seeks?\s+',
     ]
-    for pattern in split_patterns:
+    for pattern in verb_patterns:
         parts = re.split(pattern, clean, maxsplit=1, flags=re.IGNORECASE)
-        if len(parts) > 1 and len(parts[0].strip()) > 3:
-            return parts[0].strip()
-    
-    # Fallback: first 4 words
+        if len(parts) > 1 and len(parts[0].strip()) > 2:
+            candidate = parts[0].strip()
+            # Now strip trailing location prepositions: "Havelock Bridge in Andhra" → "Havelock Bridge"
+            candidate = re.split(r'\s+\b(in|at|for|of|from|with|across|under)\b\s+', candidate, maxsplit=1, flags=re.IGNORECASE)[0].strip()
+            return candidate
+
+    # If no verb found, take words up to a preposition or comma
+    location_split = re.split(r'\s+\b(in|at|for|of|from|with|across|,)\b\s+', clean, maxsplit=1, flags=re.IGNORECASE)
+    if len(location_split) > 1 and len(location_split[0].strip()) > 2:
+        return location_split[0].strip()
+
+    # Final fallback: first 2 capitalised words (likely a proper noun company name)
     words = clean.split()
-    return " ".join(words[:4])
+    return " ".join(words[:2])
 
 @app.post("/api/find-investor")
 def api_find_investor():
@@ -375,54 +407,51 @@ def api_find_investor():
     company = extract_company_name(title)
     results = []
     
-    try:
-        with DDGS() as ddgs:
-            # Search 1: LinkedIn company page
-            linkedin_query = f'"{company}" site:linkedin.com/company'
-            linkedin_results = ddgs.text(linkedin_query, max_results=3) or []
-            for item in linkedin_results:
-                if "linkedin.com" in item.get("href", ""):
-                    results.append({
-                        "type": "linkedin",
-                        "label": "LinkedIn Profile",
-                        "title": item.get("title", company),
-                        "url": item.get("href", ""),
-                        "description": item.get("body", "")[:200]
-                    })
-            
-            # Search 2: LinkedIn people (decision makers)
-            people_query = f'"{company}" CEO OR "Managing Director" OR "Head of Investment" site:linkedin.com/in'
-            people_results = ddgs.text(people_query, max_results=3) or []
-            for item in people_results:
-                if "linkedin.com/in" in item.get("href", ""):
-                    results.append({
-                        "type": "person",
-                        "label": "Key Person",
-                        "title": item.get("title", ""),
-                        "url": item.get("href", ""),
-                        "description": item.get("body", "")[:200]
-                    })
-            
-            # Search 3: Official website / contact page
-            contact_query = f'"{company}" official website contact investor relations'
-            contact_results = ddgs.text(contact_query, max_results=2) or []
-            for item in contact_results:
-                href = item.get("href", "")
-                if "linkedin.com" not in href:
-                    results.append({
-                        "type": "website",
-                        "label": "Website / Contact",
-                        "title": item.get("title", ""),
-                        "url": href,
-                        "description": item.get("body", "")[:200]
-                    })
-    except Exception as e:
-        print("Investor search error:", repr(e))
+    # Build reliable search links that always work (no rate-limiting issues)
+    encoded = quote_plus(company)
     
+    results = [
+        {
+            "type": "website",
+            "label": "Official Website",
+            "title": f"Search '{company}' official website on Google",
+            "url": f"https://www.google.com/search?q={encoded}+official+website+India",
+            "description": f"Click to find the official company website for {company} on Google."
+        },
+        {
+            "type": "linkedin",
+            "label": "Company (LinkedIn)",
+            "title": f"Find '{company}' company page on LinkedIn",
+            "url": f"https://www.linkedin.com/search/results/companies/?keywords={encoded}",
+            "description": "Search for the company's official LinkedIn page to find their team, updates and contact info."
+        },
+        {
+            "type": "linkedin",
+            "label": "Key People (LinkedIn)",
+            "title": f"Find CEO / MD of '{company}' on LinkedIn",
+            "url": f"https://www.linkedin.com/search/results/people/?keywords={encoded}+CEO+India",
+            "description": "Search LinkedIn for key decision makers — CEO, MD, Head of Investment — at this company."
+        },
+        {
+            "type": "website",
+            "label": "Investor Relations / Press",
+            "title": f"Search '{company}' investor relations on Google",
+            "url": f"https://www.google.com/search?q={encoded}+investor+relations+contact",
+            "description": f"Find press contacts, IR pages, and media contacts for {company}."
+        },
+        {
+            "type": "website",
+            "label": "News & Background",
+            "title": f"Search latest news about '{company}'",
+            "url": f"https://www.google.com/search?q={encoded}+India+investment+news&tbm=nws",
+            "description": f"Latest Google News articles about {company} to understand their investment activity."
+        }
+    ]
+
     return jsonify({
         "success": True,
         "company": company,
-        "results": results[:7]  # limit to 7 results
+        "results": results
     })
 
 if __name__ == "__main__":
