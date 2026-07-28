@@ -133,7 +133,13 @@
             <div class="metric-card"><span>Selected region</span><h2 id="regionMetric">-</h2></div>
         </section>
         <section class="content-panel">
-            <div class="content-header"><h2>Latest Investment Intelligence</h2><div class="selected-filters" id="selectedFilters">Select a sector to begin.</div></div>
+            <div class="tabs-container">
+                <button class="tab-button active" id="tabLatest">Latest News</button>
+                <button class="tab-button" id="tabSaved">Saved Leads</button>
+            </div>
+            <div class="content-header" id="newsHeader">
+                <div class="selected-filters" id="selectedFilters">Select a sector to begin.</div>
+            </div>
             <div class="news-container" id="newsContainer"><div class="empty-state"><h3>No news loaded yet</h3><p>Select filters and click Find latest news.</p></div></div>
         </section>
     </main>
@@ -155,10 +161,53 @@
 <script>
 let locationData = {};
 const targetCountry = "India";
+let currentArticles = [];
+let currentTab = "latest";
  
 const sectorSelect = document.getElementById("sectorSelect");
 const stateSelect = document.getElementById("stateSelect");
 const newsContainer = document.getElementById("newsContainer");
+const tabLatest = document.getElementById("tabLatest");
+const tabSaved = document.getElementById("tabSaved");
+
+function getSavedLeads() {
+    try { return JSON.parse(localStorage.getItem("savedLeads")) || []; }
+    catch(e) { return []; }
+}
+
+function toggleSavedLead(article) {
+    let saved = getSavedLeads();
+    const index = saved.findIndex(a => a.link === article.link);
+    if (index >= 0) {
+        saved.splice(index, 1);
+    } else {
+        saved.push(article);
+    }
+    localStorage.setItem("savedLeads", JSON.stringify(saved));
+    
+    if (currentTab === "saved") {
+        renderNews(saved);
+    } else {
+        renderNews(currentArticles);
+    }
+}
+
+tabLatest.addEventListener("click", () => {
+    currentTab = "latest";
+    tabLatest.classList.add("active");
+    tabSaved.classList.remove("active");
+    document.getElementById("newsHeader").style.display = "block";
+    renderNews(currentArticles);
+});
+
+tabSaved.addEventListener("click", () => {
+    currentTab = "saved";
+    tabSaved.classList.add("active");
+    tabLatest.classList.remove("active");
+    document.getElementById("newsHeader").style.display = "none";
+    const saved = getSavedLeads();
+    renderNews(saved);
+});
  
 function escapeHtml(value) {
     return String(value ?? "")
@@ -220,7 +269,8 @@ async function fetchNews() {
         if (!response.ok || !data.success) throw new Error(data.message || "Unable to fetch news.");
         document.getElementById("totalNews").textContent = data.total || 0;
         document.getElementById("highPriority").textContent = data.high_priority || 0;
-        renderNews(data.articles || []);
+        currentArticles = data.articles || [];
+        renderNews(currentArticles);
     } catch (error) {
         newsContainer.innerHTML = '<div class="error-box">' + escapeHtml(error.message) + '</div>';
     }
@@ -228,7 +278,11 @@ async function fetchNews() {
  
 function renderNews(articles) {
     if (!articles.length) {
-        newsContainer.innerHTML = '<div class="empty-state"><h3>No relevant news found</h3><p>No matching investment news found within the last 30 days. Try a different sector or state.</p></div>';
+        if (currentTab === "saved") {
+            newsContainer.innerHTML = '<div class="empty-state"><h3>No saved leads yet</h3><p>Star some news articles to save them here for later.</p></div>';
+        } else {
+            newsContainer.innerHTML = '<div class="empty-state"><h3>No relevant news found</h3><p>No matching investment news found within the last 30 days. Try a different sector or state.</p></div>';
+        }
         return;
     }
     newsContainer.innerHTML = "";
@@ -282,21 +336,48 @@ function renderNews(articles) {
         description.className = "news-description";
         description.textContent = article.description || "No description available.";
  
+        const btnContainer = document.createElement("div");
+        btnContainer.style.display = "flex";
+        btnContainer.style.gap = "10px";
+        btnContainer.style.marginTop = "14px";
+        
         // Find Investor button
         const findBtn = document.createElement("button");
         findBtn.className = "find-btn";
+        findBtn.style.marginTop = "0";
         findBtn.innerHTML = '&#128100; Find Investor Contact';
         findBtn.addEventListener("click", function(e) {
             e.stopPropagation();
             openInvestorModal(article.title, article.source);
         });
+
+        // Save Lead button
+        const savedLeads = getSavedLeads();
+        const isSaved = savedLeads.some(a => a.link === article.link);
+        const saveBtn = document.createElement("button");
+        saveBtn.className = "find-btn";
+        saveBtn.style.marginTop = "0";
+        if (isSaved) {
+            saveBtn.style.background = "linear-gradient(135deg,#f59e0b,#d97706)";
+            saveBtn.innerHTML = '&#9733; Saved Lead';
+        } else {
+            saveBtn.style.background = "linear-gradient(135deg,#64748b,#475569)";
+            saveBtn.innerHTML = '&#9734; Save Lead';
+        }
+        saveBtn.addEventListener("click", function(e) {
+            e.stopPropagation();
+            toggleSavedLead(article);
+        });
+
+        btnContainer.appendChild(findBtn);
+        btnContainer.appendChild(saveBtn);
  
         const keywordRow = document.createElement("div"); keywordRow.className = "keyword-row";
         (article.matched_keywords || []).forEach(function(keyword) {
             const chip = document.createElement("span"); chip.className = "keyword-chip"; chip.textContent = keyword; keywordRow.appendChild(chip);
         });
  
-        card.appendChild(top); card.appendChild(meta); card.appendChild(description); card.appendChild(findBtn); card.appendChild(keywordRow);
+        card.appendChild(top); card.appendChild(meta); card.appendChild(description); card.appendChild(btnContainer); card.appendChild(keywordRow);
         newsContainer.appendChild(card);
     });
 }
