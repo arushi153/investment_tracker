@@ -368,62 +368,44 @@ function resetDashboard() {
 }
  
 function exportToExcel() {
-    try {
-        if (!currentArticles || currentArticles.length === 0) {
-            alert("No news to export. Please search first.");
-            return;
-        }
-
-        const headers = ["Title", "Source", "Date", "Description", "Viability", "Link", "Matched Keywords"];
-        const csvRows = [headers.map(h => '"' + h + '"').join(",")];
-
-        currentArticles.forEach(article => {
-            const row = [
-                article.title,
-                article.source,
-                article.published_display,
-                article.description,
-                article.viability_msg,
-                article.link,
-                (article.matched_keywords || []).join(", ")
-            ];
-            
-            const csvRow = row.map(value => {
-                let str = String(value || "");
-                str = str.replace(/"/g, '""');
-                return '"' + str + '"';
-            }).join(",");
-            
-            csvRows.push(csvRow);
-        });
-
-        const csvData = csvRows.join("\n");
-        // Add BOM (Byte Order Mark) so Excel opens UTF-8 correctly
-        const blob = new Blob(["\ufeff" + csvData], { type: 'text/csv;charset=utf-8;' });
-        
-        // Handle IE11/Edge if needed
-        if (navigator.msSaveBlob) { 
-            navigator.msSaveBlob(blob, "Investment_News_" + new Date().toISOString().split('T')[0] + ".csv");
-            return;
-        }
-
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.style.display = "none";
-        link.setAttribute("download", "Investment_News_" + new Date().toISOString().split('T')[0] + ".csv");
-        document.body.appendChild(link);
-        link.click();
-        
-        // Clean up
-        setTimeout(() => {
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-        }, 100);
-    } catch (e) {
-        console.error("Export failed:", e);
-        alert("Export failed: " + e.message);
+    if (!currentArticles || currentArticles.length === 0) {
+        alert("No news to export. Please search first.");
+        return;
     }
+
+    const headers = ["Title", "Source", "Date", "Description", "Viability", "Link", "Matched Keywords"];
+    const csvRows = [headers.map(h => '"' + h + '"').join(",")];
+
+    currentArticles.forEach(article => {
+        const row = [
+            article.title,
+            article.source,
+            article.published_display,
+            article.description,
+            article.viability_msg,
+            article.link,
+            (article.matched_keywords || []).join(", ")
+        ];
+        
+        const csvRow = row.map(value => {
+            let str = String(value || "");
+            str = str.replace(/"/g, '""');
+            return '"' + str + '"';
+        }).join(",");
+        
+        csvRows.push(csvRow);
+    });
+
+    const csvData = csvRows.join("\n");
+    const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", "Investment_News_" + new Date().toISOString().split('T')[0] + ".csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
 }
 
 stateSelect.addEventListener("change", updateSelectedFilters);
