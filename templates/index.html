@@ -32,7 +32,6 @@
         .action-area { margin-left:auto; display:flex; align-items:flex-end; gap:10px; }
         button { height:42px; padding:0 20px; border-radius:10px; font-weight:700; cursor:pointer; }
         .search-button { border:none; background:linear-gradient(135deg,var(--blue),#1d4ed8); color:var(--white); box-shadow:0 8px 18px rgba(37,99,235,.25); }
-        .export-button { border:none; background:linear-gradient(135deg,#10b981,#059669); color:var(--white); box-shadow:0 8px 18px rgba(16,185,129,.25); }
         .reset-button { border:1px solid #cbd5e1; background:var(--white); color:#334155; }
         .main-content { flex:1; padding:28px 32px; }
         .dashboard-grid { display:grid; grid-template-columns:repeat(4,minmax(160px,1fr)); gap:18px; margin-bottom:24px; }
@@ -115,7 +114,6 @@
         </div>
         <div class="action-area">
             <button type="button" class="search-button" id="searchButton">Find latest news</button>
-            <button type="button" class="export-button" id="exportButton">Export to Excel</button>
             <button type="button" class="reset-button" id="resetButton">Reset</button>
         </div>
     </nav>
@@ -157,7 +155,6 @@
 <script>
 let locationData = {};
 const targetCountry = "India";
-let currentArticles = [];
  
 const sectorSelect = document.getElementById("sectorSelect");
 const stateSelect = document.getElementById("stateSelect");
@@ -223,8 +220,7 @@ async function fetchNews() {
         if (!response.ok || !data.success) throw new Error(data.message || "Unable to fetch news.");
         document.getElementById("totalNews").textContent = data.total || 0;
         document.getElementById("highPriority").textContent = data.high_priority || 0;
-        currentArticles = data.articles || [];
-        renderNews(currentArticles);
+        renderNews(data.articles || []);
     } catch (error) {
         newsContainer.innerHTML = '<div class="error-box">' + escapeHtml(error.message) + '</div>';
     }
@@ -364,54 +360,11 @@ function resetDashboard() {
     document.getElementById("regionMetric").textContent = "-";
     document.getElementById("selectedFilters").textContent = "Select a sector to begin.";
     newsContainer.innerHTML = '<div class="empty-state"><h3>No news loaded yet</h3><p>Select filters and click Find latest news.</p></div>';
-    currentArticles = [];
 }
  
-function exportToExcel() {
-    if (!currentArticles || currentArticles.length === 0) {
-        alert("No news to export. Please search first.");
-        return;
-    }
-
-    const headers = ["Title", "Source", "Date", "Description", "Viability", "Link", "Matched Keywords"];
-    const csvRows = [headers.map(h => '"' + h + '"').join(",")];
-
-    currentArticles.forEach(article => {
-        const row = [
-            article.title,
-            article.source,
-            article.published_display,
-            article.description,
-            article.viability_msg,
-            article.link,
-            (article.matched_keywords || []).join(", ")
-        ];
-        
-        const csvRow = row.map(value => {
-            let str = String(value || "");
-            str = str.replace(/"/g, '""');
-            return '"' + str + '"';
-        }).join(",");
-        
-        csvRows.push(csvRow);
-    });
-
-    const csvData = csvRows.join("\n");
-    const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    
-    const link = document.createElement("a");
-    link.href = url;
-    link.setAttribute("download", "Investment_News_" + new Date().toISOString().split('T')[0] + ".csv");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-}
-
 stateSelect.addEventListener("change", updateSelectedFilters);
 sectorSelect.addEventListener("change", updateSelectedFilters);
 document.getElementById("searchButton").addEventListener("click", fetchNews);
-document.getElementById("exportButton").addEventListener("click", exportToExcel);
 document.getElementById("resetButton").addEventListener("click", resetDashboard);
 loadLocations();
 </script>
