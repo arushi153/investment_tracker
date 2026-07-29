@@ -194,6 +194,10 @@ def build_queries(sector, state=""):
     ]
     if state:
         queries.append(f'{state} {sector} investment')
+        if state.lower() == "rajasthan":
+            queries.append(f'"Rising Rajasthan" {sector}')
+            queries.append(f'Rising Rajasthan MoU {sector}')
+            queries.append(f'invest in Rajasthan {sector}')
  
     clean_queries = []
     for query in queries:
